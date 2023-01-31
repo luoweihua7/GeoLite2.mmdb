@@ -1,0 +1,70 @@
+
+name: GeoLite2
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 1 */3 * *
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+    - name: Download GeoLite.mmdb
+      run: |
+        wget -nv -O- "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&license_key=${{ secrets.LICENSE_KEY }}&suffix=tar.gz" | tar zxv
+        wget -nv -O- "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.LICENSE_KEY }}&suffix=tar.gz" | tar zxv
+        wget -nv -O- "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=${{ secrets.LICENSE_KEY }}&suffix=tar.gz" | tar zxv
+        mkdir -p upload
+        cp -v GeoLite*/*.mmdb upload
+        echo "TAG_NAME=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
+        echo "TG_MSG=GeoLite2 数据库更新至 $(date +"%Y.%m.%d")" >> $GITHUB_ENV
+
+    - name: Upload GeoLite2 files to R2 bucket
+      uses: willfurstenau/r2-dir-upload@main
+      with:
+        accountid: ${{ secrets.CF_ACCOUNT_ID }}
+        accesskeyid: ${{ secrets.CF_ACCESS_KEY }}
+        secretaccesskey: ${{ secrets.CF_SECRET_KEY }}
+        bucket: ${{ secrets.R2_BUCKET }}
+        source: ${{ github.workspace }}/upload
+        destination: /files/
+
+    - name: Push to "download" branch
+      run: |
+        cd upload
+        git init
+        git config user.name "${{ github.actor }}"
+        git config user.email "${{ github.actor }}@users.noreply.github.com"
+        git checkout -b download
+        git add .
+        git commit -m "${{ env.TAG_NAME }}"
+        git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+        git push -f origin download
+
+    - name: Upload to Releases
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.TAG_NAME }}
+        body: ${{ env.TAG_NAME }}
+        files: upload/*.mmdb
+
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@v0.2.0
+      with:
+        keep_latest: 3
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Send telegram message
+      uses: appleboy/telegram-action@master
+      with:
+        to: ${{ secrets.TELEGRAM_TO }}
+        token: ${{ secrets.TELEGRAM_TOKEN }}
+        message: ${{ env.TG_MSG }}
