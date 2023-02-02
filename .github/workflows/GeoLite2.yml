@@ -21,7 +21,6 @@ jobs:
         mkdir -p upload
         cp -v GeoLite*/*.mmdb upload
         echo "TAG_NAME=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
-        echo "TG_MSG=GeoLite2 数据库更新至 $(date +"%Y.%m.%d")" >> $GITHUB_ENV
 
     - name: Upload GeoLite2 files to R2 bucket
       uses: willfurstenau/r2-dir-upload@main
@@ -67,4 +66,14 @@ jobs:
       with:
         to: ${{ secrets.TELEGRAM_TO }}
         token: ${{ secrets.TELEGRAM_TOKEN }}
-        message: ${{ env.TG_MSG }}
+        format: markdown
+        disable_web_page_preview: true
+        message: |
+          *GeoLite2 数据库更新至 ${{ env.TAG_NAME }}*
+
+          [GeoLite2-ASN.mmdb](https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/GeoLite2-ASN.mmdb)
+          [GeoLite2-City.mmdb](https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/GeoLite2-City.mmdb)
+          [GeoLite2-Country.mmdb](https://github.com/${{ github.repository }}/releases/download/${{ env.TAG_NAME }}/GeoLite2-Country.mmdb)
+
+          #GeoLite2 #Update
+
